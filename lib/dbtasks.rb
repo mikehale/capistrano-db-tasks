@@ -26,8 +26,14 @@ Capistrano::Configuration.instance.load do |instance|
     end
 
     namespace(stage) do
+      desc "Rollback the #{stage} database to the previous backup."
       task :rollback do
         Database::Remote.new(instance).restore
+      end
+
+      desc "Backup the #{stage} database to shared_path+/db_backups"
+      task :dump do
+        Database::Remote.new(instance).dump
       end
     end
   end

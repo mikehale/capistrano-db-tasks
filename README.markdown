@@ -6,7 +6,7 @@ Add database tasks to capistrano to a Rails project
 Currentlty
 
 * It only supports mysql (both side remote and local)
-* Only synchronize remote to local (cap db:local:sync)
+* It has the following tasks: db:local:sync, db:production:rollback, db:production:backup
 
 Commands mysql, mysqldump, bzip2 and unbzip2 must be in your PATH
 
