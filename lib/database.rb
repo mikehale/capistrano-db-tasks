@@ -18,12 +18,12 @@ module Database
     end
     
   private
-    def dump_cmd
-      "mysqldump #{credentials} #{database}"
+    def dump_cmd(file)
+      "mysqldump --add-drop-table #{credentials} #{database} | bzip2 -c > #{file}"
     end
 
     def import_cmd(file)
-      "mysql #{credentials} -D #{database} < #{file}"
+      "bunzip2 -c #{file} | mysql #{credentials} -D #{database}"
     end
   end
 
@@ -31,24 +31,57 @@ module Database
     attr_accessor :output_file
     def initialize(cap_instance)
       super(cap_instance)
-      @cap.run("cat #{@cap.current_path}/config/database.yml") { |c, s, d| @config = YAML.load(d)[@cap.rails_env.to_s] }
+      @cap.run("cat #{@cap.current_path}/config/database.yml") { |c, s, d|
+        @config = YAML.load(d)[@cap.rails_env.to_s]
+      }
     end
-          
+
     def output_file
-      @output_file ||= "db/dump_#{database}.sql.bz2"
+      @output_file ||= "#{database}-snapshot-#{backup_time}.sql.bz2"
     end
-    
+
+    def output_path
+      @output_path ||= File.join(backups_path, output_file)
+    end
+
+    def backup_time
+      unless @backup_time do
+        now = Time.now
+        @backup_time = [now.year,now.month,now.day,now.hour,now.min,now.sec].join('-')
+      end
+      @backup_time
+    end
+
     def dump
-      @cap.run "cd #{@cap.current_path}; #{dump_cmd} | bzip2 - - > #{output_file}"
+      @cap.run "mkdir -p #{backups_path}"
+      @cap.run dump_cmd("output_path")
       self
     end
-    
-    def download(local_file = "#{output_file}") 
-      remote_file = "#{@cap.current_path}/#{output_file}"
-      
+
+    def restore
+      @cap.run import_cmd(last_backup_file)
+    end
+
+    def download
+      local_file = output_file
+      remote_file = output_path
       server = @cap.find_servers(:roles => :db).first
+
       @cap.sessions[server].sftp.connect {|tsftp| tsftp.download!(remote_file, local_file) }
     end
+
+    def backups_path
+      File.join(@cap.shared_path, "db_backups")
+    end
+
+    def backups
+      @cap.capture("ls -xt #{backups_path}").split.reverse
+    end
+
+    def last_backup_file
+      File.join(backups_path, backups.last)
+    end
+
   end
 
   class Local < Base
@@ -58,8 +91,7 @@ module Database
     end
     
     def load(file)
-      unzip_file = File.join(File.dirname(file), File.basename(file, '.bz2'))
-      system("bunzip2 -f #{file} && rake db:drop db:create && #{import_cmd(unzip_file)} && rake db:migrate") 
+      system("rake db:drop db:create && #{import_cmd(file)} && rake db:migrate") 
     end
   end
   

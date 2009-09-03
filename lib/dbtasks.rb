@@ -4,11 +4,12 @@ Capistrano::Configuration.instance.load do |instance|
 
   require File.expand_path("#{File.dirname(__FILE__)}/util")
   require File.expand_path("#{File.dirname(__FILE__)}/database")
-  
-  instance.set :local_rails_env, ENV['RAILS_ENV'] || 'development' unless exists?(:local_rails_env)
-  instance.set :stage, 'production' unless exists?(:stage)
-  
+
+  instance._cset :local_rails_env, ENV['RAILS_ENV'] || 'development'
+  instance._cset :stage, 'production'
+
   namespace :db do
+
     namespace :local do
       desc 'Synchronize your local database using remote database data'
       task :sync, :roles => :db do
@@ -17,11 +18,18 @@ Capistrano::Configuration.instance.load do |instance|
           remote_db = Database::Remote.new(instance)
 
           Database.check(local_db, remote_db)
-          
+
           remote_db.dump.download
           local_db.load(remote_db.output_file)
         end
       end
     end
+
+    namespace(stage) do
+      task :rollback do
+        Database::Remote.new(instance).restore
+      end
+    end
   end
+
 end
